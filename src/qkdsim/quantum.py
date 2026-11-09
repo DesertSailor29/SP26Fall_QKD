@@ -56,3 +56,22 @@ class PerfectChannel:
 
     def transmit(self, pulses: Pulses) -> Pulses:
         return Pulses(bits=pulses.bits.copy(), bases=pulses.bases.copy())
+
+
+class InterceptResendEve:
+    """Intercept-resend attack: Eve measures every pulse in a random basis and sends Bob a fresh
+    pulse encoding what she saw, in the basis she used.
+
+    She picks the wrong basis half the time, and then Bob's matched-basis result is a coin flip, so
+    she causes a QBER of about 25% on the sifted key. Her bases and results are kept for analysis.
+    """
+
+    def __init__(self, rng: RandomSource) -> None:
+        self.rng = rng
+        self.bases: np.ndarray | None = None
+        self.results: np.ndarray | None = None
+
+    def transmit(self, pulses: Pulses) -> Pulses:
+        self.bases = self.rng.bits(len(pulses))
+        self.results = measure(pulses, self.bases, self.rng)
+        return Pulses(bits=self.results.copy(), bases=self.bases.copy())

@@ -33,14 +33,44 @@ def test_keys_are_not_shared_objects():
     assert not np.shares_memory(r.alice_key, r.bob_key)
 
 
-def test_transcript_has_sifting_messages_only():
+def test_transcript_has_sifting_and_qber_messages():
     r = run_bb84(100, seed=0)
     assert [(e.sender, e.recipient, e.kind) for e in r.transcript] == [
         ("bob", "alice", "bases"),
         ("alice", "bob", "sift"),
+        ("alice", "bob", "sample"),
+        ("bob", "alice", "qber"),
     ]
 
 
 def test_rejects_nonpositive_pulses():
     with pytest.raises(ValueError):
         run_bb84(0)
+
+
+def test_no_eve_gives_zero_qber_and_a_key():
+    r = run_bb84(4000, seed=3)
+    assert r.qber == 0 and not r.aborted
+    assert r.keys_match
+    assert len(r.alice_key) == r.sifted_bits - r.sample_size
+
+
+def test_sample_is_removed_from_key():
+    r = run_bb84(1000, seed=4, sample_fraction=0.5)
+    assert abs(r.sample_size - r.sifted_bits / 2) <= 1
+    assert len(r.alice_key) == len(r.bob_key) == r.sifted_bits - r.sample_size
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_intercept_resend_eve_is_detected(seed):
+    r = run_bb84(4000, seed=seed, eve=True)
+    # Expected QBER 25%; sample ~500 bits gives sigma ~2%.
+    assert 0.17 < r.qber < 0.33
+    assert r.aborted
+    assert not r.keys_match
+
+
+def test_eve_and_channel_are_exclusive():
+    from qkdsim.quantum import PerfectChannel
+    with pytest.raises(ValueError):
+        run_bb84(100, eve=True, channel=PerfectChannel())

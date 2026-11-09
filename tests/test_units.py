@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from qkdsim.quantum import PerfectChannel, Pulses, measure
+from qkdsim.parties import sample_size
+from qkdsim.quantum import InterceptResendEve, PerfectChannel, Pulses, measure
 from qkdsim.rng import SeededRandom, SystemRandom
 from qkdsim.sifting import matching_mask, sift
 from qkdsim.transport import InMemoryTransport, TransportError, decode_bits, encode_bits
@@ -93,3 +94,29 @@ def test_recv_errors():
 def test_bit_codec_roundtrip(n):
     bits = SeededRandom(n).bits(n)
     assert np.array_equal(decode_bits(encode_bits(bits)), bits)
+
+
+@pytest.mark.parametrize("src", [SystemRandom(), SeededRandom(0)])
+def test_sample_positions_are_distinct_sorted_in_range(src):
+    idx = src.sample(100, 30)
+    assert len(idx) == 30 == len(set(idx.tolist()))
+    assert list(idx) == sorted(idx) and idx.min() >= 0 and idx.max() < 100
+
+
+def test_sample_size_bounds():
+    assert sample_size(100, 0.25) == 25
+    assert sample_size(1, 0.25) == 1
+    with pytest.raises(ValueError):
+        sample_size(0, 0.25)
+    with pytest.raises(ValueError):
+        sample_size(10, 0)
+
+
+def test_eve_resends_in_her_own_bases():
+    rng = SeededRandom(5)
+    pulses = Pulses(bits=rng.bits(1000), bases=rng.bits(1000))
+    eve = InterceptResendEve(SeededRandom(6))
+    out = eve.transmit(pulses)
+    assert np.array_equal(out.bases, eve.bases) and np.array_equal(out.bits, eve.results)
+    same = eve.bases == pulses.bases
+    assert np.array_equal(out.bits[same], pulses.bits[same])
