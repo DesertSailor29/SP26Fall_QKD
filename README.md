@@ -39,6 +39,30 @@ Quantum layer: BB84 model -> sifting -> error correction -> privacy amplificatio
 The quantum layer is a model of BB84 (configurable error rate, loss and an optional eavesdropper),
 not a physical simulation.
 
+## Running it
+
+Every party in its own Docker container (needs Docker with the compose plugin):
+
+```bash
+./run.sh                 # Alice -> Bob
+./run.sh --eve           # Alice -> Eve -> Bob (intercept-resend; the QBER goes to ~25% and both abort)
+./run.sh --eve -n 5000   # choose how many pulses Alice sends
+```
+
+Alice and Bob talk over a classical TCP link. The quantum channel is a separate link, from Alice to
+Bob, or from Alice to Eve to Bob. Neither Alice nor Bob is told whether Eve is there; they find out
+from the error rate. Each side prints a SHA-256 fingerprint of its final key so you can check that
+they match.
+
+The same protocol in one process, without Docker:
+
+```bash
+pip install -e '.[dev]'
+python -m qkdsim -n 1000 [--eve]
+python -m qkdsim.node --help          # run a single party by hand
+pytest
+```
+
 ## Team
 
 Group of 6 students; deadline early December 2026.

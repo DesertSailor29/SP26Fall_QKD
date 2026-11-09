@@ -1,0 +1,32 @@
+# Each party runs in its own container on a private network; they reach each other by service name.
+#
+#   ./run.sh          Alice -> Bob
+#   ./run.sh --eve    Alice -> Eve -> Bob (Eve intercepts and resends every pulse)
+#
+# Without run.sh:  docker compose up --build
+#                  QUANTUM_VIA=eve docker compose --profile eve up --build
+
+x-node: &node
+  build: .   # one image for all parties (cached after the first build)
+
+services:
+  bob:
+    <<: *node
+    command: ["bob"]
+
+  alice:
+    <<: *node
+    depends_on: [bob]
+    # The quantum channel goes to Bob, or to Eve when QUANTUM_VIA=eve. Alice is not told which.
+    command: ["alice", "-n", "${PULSES:-1000}", "--bob", "bob:5000",
+              "--quantum", "${QUANTUM_VIA:-bob}:5001"]
+
+  eve:
+    <<: *node
+    depends_on: [bob]
+    profiles: ["eve"]
+    command: ["eve", "--forward", "bob:5001"]
+
+networks:
+  default:
+    name: qkd-net
