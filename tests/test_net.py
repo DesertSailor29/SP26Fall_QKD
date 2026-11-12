@@ -23,8 +23,8 @@ def free_ports(n):
     return ports
 
 
-def node(*args):
-    return subprocess.Popen([sys.executable, "-m", "qkdsim.node", *args],
+def node(*args, module="qkdsim.node"):
+    return subprocess.Popen([sys.executable, "-m", module, *args],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
 
@@ -64,6 +64,17 @@ def test_alice_bob_processes_agree():
                  "--quantum", f"127.0.0.1:{qport}")
     out_a, out_b = finish(alice), finish(bob)
     assert "ABORT" not in out_a and "ABORT" not in out_b
+    assert fingerprint(out_a) == fingerprint(out_b)
+
+
+def test_alice_and_bob_run_from_their_own_modules():
+    cport, qport = free_ports(2)
+    bob = node("--classical-port", str(cport), "--quantum-port", str(qport), module="qkdsim.bob")
+    time.sleep(0.3)
+    alice = node("-n", "2000", "--bob", f"127.0.0.1:{cport}", "--quantum", f"127.0.0.1:{qport}",
+                 module="qkdsim.alice")
+    out_a, out_b = finish(alice), finish(bob)
+    assert "Warning" not in out_a + out_b  # e.g. runpy's "found in sys.modules" double import
     assert fingerprint(out_a) == fingerprint(out_b)
 
 

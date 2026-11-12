@@ -1,5 +1,9 @@
 """Run one BB84 party per process: python -m qkdsim.node {alice,bob,eve} [options]
 
+Each party has its own module (qkdsim.alice, qkdsim.bob) with its class and its process; this
+module picks one to run and holds what the party processes share: ports, logging and the final
+report. Eve's process is still here until she gets her own module.
+
 docker-compose.yml starts each party in its own container. Topology:
 
     alice ──quantum──▶ bob                  (no Eve)
@@ -9,20 +13,27 @@ docker-compose.yml starts each party in its own container. Topology:
 Neither Alice nor Bob is told whether Eve is present; they find out from the QBER.
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import sys
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from qkdsim import net
-from qkdsim.parties import Alice, Bob
-from qkdsim.protocol import QBER_THRESHOLD, SAMPLE_FRACTION
+from qkdsim.params import QBER_THRESHOLD
 from qkdsim.quantum import InterceptResendEve
 from qkdsim.rng import SystemRandom
 
+if TYPE_CHECKING:
+    from qkdsim.alice import Alice
+    from qkdsim.bob import Bob
+
 CLASSICAL_PORT = 5000
 QUANTUM_PORT = 5001
+ROLES = ("alice", "bob", "eve")
 
 
 def log(who: str, text: str) -> None:
@@ -32,6 +43,12 @@ def log(who: str, text: str) -> None:
 def bits_str(bits: np.ndarray, limit: int) -> str:
     s = "".join(map(str, bits[:limit]))
     return s + ("..." if len(bits) > limit else "")
+
+
+def add_common_args(p: argparse.ArgumentParser) -> None:
+    """Options Alice and Bob both take."""
+    p.add_argument("--show", type=int, default=32, help="how many bits to print")
+    p.add_argument("--threshold", type=float, default=QBER_THRESHOLD, help="QBER abort threshold")
 
 
 def report(who: str, party: Alice | Bob, threshold: float, show: int) -> int:
@@ -45,55 +62,6 @@ def report(who: str, party: Alice | Bob, threshold: float, show: int) -> int:
     log(who, f"final key: {len(party.key)} bits  {bits_str(party.key, show)}")
     log(who, f"key fingerprint (sha256): {digest}  <- compare with the other side")
     return 0
-
-
-def run_alice(args: argparse.Namespace) -> int:
-    alice_rng = SystemRandom()
-    log("alice", f"connecting classical channel to bob at {args.bob}")
-    endpoint = net.TcpEndpoint("alice", net.connect(args.bob))
-    alice = Alice(endpoint, alice_rng)
-
-    pulses = alice.prepare(args.pulses)
-    log("alice", f"bits : {bits_str(alice._bits, args.show)}")
-    log("alice", f"bases: {bits_str(alice._bases, args.show)}")
-    log("alice", f"sending {args.pulses} pulses over the quantum channel to {args.quantum}")
-    with net.connect(args.quantum) as qsock:
-        net.send_pulses(qsock, pulses)
-
-    alice.sift()
-    alice.send_sample(args.sample_fraction)
-    alice.receive_qber()
-    endpoint.close()
-
-    log("alice", "classical transcript (public, Eve may read all of it):")
-    for e in endpoint.transcript:
-        log("alice", f"  #{e.seq} {e.sender} -> {e.recipient} {e.kind:6s} {e.size} bytes")
-    return report("alice", alice, args.threshold, args.show)
-
-
-def run_bob(args: argparse.Namespace) -> int:
-    classical = net.listen(args.classical_port)
-    quantum = net.listen(args.quantum_port)
-    log("bob", f"listening: classical :{args.classical_port}, quantum :{args.quantum_port}")
-
-    endpoint = net.TcpEndpoint("bob", net.accept(classical))
-    log("bob", "classical channel connected")
-    bob = Bob(endpoint, SystemRandom())
-
-    with net.accept(quantum) as qsock:
-        pulses = net.recv_pulses(qsock)
-    bob.measure(pulses)
-    log("bob", f"received {len(pulses)} pulses, measured in random bases")
-    log("bob", f"bases: {bits_str(bob._bases, args.show)}")
-    log("bob", f"bits : {bits_str(bob._results, args.show)}")
-
-    bob.announce_bases()
-    bob.sift()
-    bob.estimate_qber()
-    endpoint.close()
-    classical.close()
-    quantum.close()
-    return report("bob", bob, args.threshold, args.show)
 
 
 def run_eve(args: argparse.Namespace) -> int:
@@ -115,32 +83,31 @@ def run_eve(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="qkdsim.node", description="Run one BB84 party.")
+def eve_main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="qkdsim.node eve",
+                                description="Run Eve, an intercept-resend eavesdropper on the "
+                                            "quantum channel.")
     p.add_argument("--show", type=int, default=32, help="how many bits to print")
-    p.add_argument("--threshold", type=float, default=QBER_THRESHOLD, help="QBER abort threshold")
-    sub = p.add_subparsers(dest="role", required=True)
+    p.add_argument("--listen-port", type=int, default=QUANTUM_PORT)
+    p.add_argument("--forward", default=f"bob:{QUANTUM_PORT}", help="Bob's quantum host:port")
+    return run_eve(p.parse_args(argv))
 
-    a = sub.add_parser("alice", help="sender")
-    a.add_argument("-n", "--pulses", type=int, default=1000, help="qubits to send")
-    a.add_argument("--bob", default=f"bob:{CLASSICAL_PORT}", help="Bob's classical host:port")
-    a.add_argument("--quantum", default=f"bob:{QUANTUM_PORT}",
-                   help="where the quantum channel goes, host:port (Bob, or Eve to tap it)")
-    a.add_argument("--sample-fraction", type=float, default=SAMPLE_FRACTION,
-                   help="share of the sifted key sacrificed for the QBER estimate")
 
-    b = sub.add_parser("bob", help="receiver")
-    b.add_argument("--classical-port", type=int, default=CLASSICAL_PORT)
-    b.add_argument("--quantum-port", type=int, default=QUANTUM_PORT)
-
-    e = sub.add_parser("eve", help="intercept-resend eavesdropper on the quantum channel")
-    e.add_argument("--listen-port", type=int, default=QUANTUM_PORT)
-    e.add_argument("--forward", default=f"bob:{QUANTUM_PORT}", help="Bob's quantum host:port")
-
-    args = p.parse_args(argv)
-    if args.role == "alice" and args.pulses <= 0:
-        p.error("--pulses must be positive")
-    return {"alice": run_alice, "bob": run_bob, "eve": run_eve}[args.role](args)
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="qkdsim.node", description="Run one BB84 party.",
+                                epilog="Options after the role go to that party, "
+                                       "e.g. python -m qkdsim.node alice --help")
+    p.add_argument("role", choices=ROLES)
+    p.add_argument("args", nargs=argparse.REMAINDER, help="options for that party")
+    ns = p.parse_args(argv)
+    # Imported here, not at the top: alice.py and bob.py import this module's helpers.
+    if ns.role == "alice":
+        from qkdsim.alice import main as party_main
+    elif ns.role == "bob":
+        from qkdsim.bob import main as party_main
+    else:
+        party_main = eve_main
+    return party_main(ns.args)
 
 
 if __name__ == "__main__":
