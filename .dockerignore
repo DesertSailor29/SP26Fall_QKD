@@ -8,3 +8,11 @@ tests
 docs
 CLAUDE*
 .claude
+# Kerberos secrets and runtime state: keep them out of every build context. The KDC database
+# files are root-owned, so sending them would also make the build fail.
+.env
+kdc/data
+kdc/logs
+**/keytabs
+**/*.keytab
+**/krb5cc_*
