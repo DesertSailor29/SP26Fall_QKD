@@ -59,7 +59,8 @@ The same protocol in one process, without Docker:
 ```bash
 pip install -e '.[dev]'
 python -m qkdsim -n 1000 [--eve]
-python -m qkdsim.node --help          # run a single party by hand
+python -m qkdsim.node --help          # run a single party by hand (alice, bob or eve)
+python -m qkdsim.alice --help         # or start Alice / Bob from their own module
 pytest
 ```
 
