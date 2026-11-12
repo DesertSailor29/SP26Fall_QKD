@@ -66,8 +66,15 @@ def run(args: argparse.Namespace) -> int:
     quantum = net.listen(args.quantum_port)
     log("bob", f"listening: classical :{args.classical_port}, quantum :{args.quantum_port}")
 
-    endpoint = net.TcpEndpoint("bob", net.accept(classical))
+    sock = net.accept(classical)
     log("bob", "classical channel connected")
+    if args.kerberos:
+        from qkdsim import kerberos  # needs gssapi, so only imported when asked for
+        context = kerberos.accept(sock, args.kerberos, args.kerberos_peer)
+        log("bob", f"kerberos: authenticated alice as {context.initiator_name}")
+        endpoint = kerberos.KerberosEndpoint("bob", sock, context)
+    else:
+        endpoint = net.TcpEndpoint("bob", sock)
     bob = Bob(endpoint, SystemRandom())
 
     with net.accept(quantum) as qsock:
@@ -91,7 +98,15 @@ def main(argv: list[str] | None = None) -> int:
     add_common_args(p)
     p.add_argument("--classical-port", type=int, default=CLASSICAL_PORT)
     p.add_argument("--quantum-port", type=int, default=QUANTUM_PORT)
-    return run(p.parse_args(argv))
+    p.add_argument("--kerberos", metavar="SERVICE",
+                   help="authenticate the classical channel with Kerberos as this principal "
+                        "(key from the keytab in KRB5_KTNAME)")
+    p.add_argument("--kerberos-peer", metavar="PRINCIPAL",
+                   help="the client principal Alice must authenticate as")
+    args = p.parse_args(argv)
+    if args.kerberos and not args.kerberos_peer:
+        p.error("--kerberos needs --kerberos-peer")
+    return run(args)
 
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ echo "KDC key version:"; kadm "getprinc ${BOB_PRINC}" | grep -i "key version" ||
 docker compose exec -T bob klist -ke "$BOB_KT" 2>/dev/null || echo "(klist not available in bob, checksum match is enough)"
 
 # ------------------------------------------------------------ 8. test
-step "8/8 Testing authentication"
+step "8/8 Testing Kerberos-authenticated BB84"
 docker compose logs --tail 3 bob
 echo
 echo "Getting a fresh ticket for alice (enter alice's password):"
@@ -92,6 +92,7 @@ docker compose exec alice kdestroy -A 2>/dev/null || true
 docker compose exec alice kinit alice
 docker compose exec alice klist
 echo
-docker compose exec alice python3 src/client.py
+docker compose exec alice python3 -m qkdsim.node alice \
+  --kerberos "${BOB_PRINC}" --bob bob:5000 --quantum bob:5001
 echo
-echo "Done. If the client authenticated successfully, everything is set up correctly."
+echo "Done. If both sides authenticated and print the same key fingerprint, everything is set up correctly."

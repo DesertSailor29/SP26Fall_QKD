@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-gssapi \
+    python3-numpy \
     libkrb5-3 \
     krb5-user \
     && rm -rf /var/lib/apt/lists/*

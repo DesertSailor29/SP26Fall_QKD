@@ -75,7 +75,14 @@ class Alice:
 def run(args: argparse.Namespace) -> int:
     """Run Alice as her own process (e.g. her own container) over TCP."""
     log("alice", f"connecting classical channel to bob at {args.bob}")
-    endpoint = net.TcpEndpoint("alice", net.connect(args.bob))
+    sock = net.connect(args.bob)
+    if args.kerberos:
+        from qkdsim import kerberos  # needs gssapi, so only imported when asked for
+        context = kerberos.initiate(sock, args.kerberos)
+        log("alice", f"kerberos: authenticated bob as {context.target_name}")
+        endpoint = kerberos.KerberosEndpoint("alice", sock, context)
+    else:
+        endpoint = net.TcpEndpoint("alice", sock)
     alice = Alice(endpoint, SystemRandom())
 
     pulses = alice.prepare(args.pulses)
@@ -105,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="where the quantum channel goes, host:port (Bob, or Eve to tap it)")
     p.add_argument("--sample-fraction", type=float, default=SAMPLE_FRACTION,
                    help="share of the sifted key sacrificed for the QBER estimate")
+    p.add_argument("--kerberos", metavar="SERVICE",
+                   help="authenticate the classical channel with Kerberos to Bob's principal")
     args = p.parse_args(argv)
     if args.pulses <= 0:
         p.error("--pulses must be positive")

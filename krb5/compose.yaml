@@ -1,3 +1,13 @@
+# Kerberos-authenticated BB84: a KDC, Bob (BB84 receiver with a keytab) and Alice (BB84 sender).
+#
+#   ./setup.sh                                     first time: principals, keytab, test run
+#   docker compose exec alice kinit alice          Alice gets a ticket (valid ~10 h)
+#   docker compose exec alice python3 -m qkdsim.node alice \
+#       --kerberos bob/localhost@PROJECT.TEST --bob bob:5000 --quantum bob:5001
+#   docker compose logs bob                        Bob's side of the run
+#
+# The BB84 code is mounted from ../src/qkdsim, so edits there need no rebuild.
+
 services:
   kdc:
     build:
@@ -40,6 +50,14 @@ services:
     volumes:
       - ./bob/krb5.conf:/etc/krb5.conf:ro
       - ./bob/keytabs/bob.keytab:/etc/bob/bob.keytab:ro
+      - ../src/qkdsim:/app/qkdsim:ro
+
+    # Bob runs one BB84 session (classical :5000, quantum :5001) and exits; the restart policy
+    # brings him back for the next one. The Kerberos-only demo is still in src/server.py.
+    command: ["python3", "-m", "qkdsim.node", "bob",
+              "--kerberos", "bob/localhost@PROJECT.TEST",
+              "--kerberos-peer", "alice@PROJECT.TEST"]
+    restart: unless-stopped
 
     ports:
       - "5000:5000"
@@ -60,6 +78,7 @@ services:
       KRB5CCNAME: FILE:/tmp/krb5cc_alice
     volumes:
       - ./bob/krb5.conf:/etc/krb5.conf:ro
+      - ../src/qkdsim:/app/qkdsim:ro
     depends_on:
       - kdc
     networks:

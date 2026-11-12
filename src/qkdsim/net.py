@@ -99,10 +99,10 @@ class TcpEndpoint:
         msg = Message(self.name, to, kind, payload)
         raw = msg.to_bytes()
         self._record(msg, raw)
-        send_frame(self.sock, raw)
+        self._write(raw)
 
     def recv(self, kind: str) -> Message:
-        raw = recv_frame(self.sock)
+        raw = self._read()
         msg = Message.from_bytes(raw)
         self._record(msg, raw)
         if msg.recipient != self.name:
@@ -113,6 +113,13 @@ class TcpEndpoint:
 
     def close(self) -> None:
         self.sock.close()
+
+    # Wire format of one message; an authenticated endpoint overrides these to add a tag.
+    def _write(self, raw: bytes) -> None:
+        send_frame(self.sock, raw)
+
+    def _read(self) -> bytes:
+        return recv_frame(self.sock)
 
     def _record(self, msg: Message, raw: bytes) -> None:
         self.transcript.append(TranscriptEntry(
