@@ -42,7 +42,11 @@ service_name = gssapi.Name(
 context = gssapi.SecurityContext(
     name=service_name,
     usage="initiate",
-    flags=[gssapi.RequirementFlag.mutual_authentication]
+    flags=[
+        gssapi.RequirementFlag.mutual_authentication,
+        gssapi.RequirementFlag.confidentiality,
+        gssapi.RequirementFlag.integrity,
+    ]
 )
 
 print("Connecting to Bob...")
@@ -64,5 +68,8 @@ with socket.create_connection((SERVER, PORT)) as connection:
     print("Kerberos authentication successful!")
     print(f"Authenticated server: {context.target_name}")
 
-    response = recv_frame(connection)
-    print("Bob says:", response.decode())
+    # Session: messages are encrypted with the Kerberos session key
+    for text in ["Hello Bob", "This is our encrypted session"]:
+        send_frame(connection, context.wrap(text.encode(), True).message)
+        reply = context.unwrap(recv_frame(connection))
+        print("Bob says:", reply.message.decode(), f"(encrypted={reply.encrypted})")

@@ -77,7 +77,17 @@ while True:
         print("Kerberos authentication successful!", flush=True)
         print(f"Authenticated client: {context.initiator_name}", flush=True)
 
-        send_frame(connection, b"Authentication successful!")
+        # Session: decrypt Alice's messages and reply until she disconnects
+        while True:
+            try:
+                request = context.unwrap(recv_frame(connection))
+            except ConnectionError:
+                break
+
+            print("Alice says:", request.message.decode(), f"(encrypted={request.encrypted})", flush=True)
+            send_frame(connection, context.wrap(b"Got: " + request.message, True).message)
+
+        print("Session closed", flush=True)
 
     except Exception as error:
         print(f"Authentication failed: {error}", flush=True)
