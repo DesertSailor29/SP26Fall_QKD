@@ -1,0 +1,4 @@
+.env
+kdc/data/
+kdc/logs/
+bob/keytabs/

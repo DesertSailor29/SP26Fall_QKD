@@ -1,0 +1,70 @@
+services:
+  kdc:
+    build:
+      context: ./kdc
+
+    container_name: kdc
+    hostname: kdc
+
+    environment:
+      KRB5_REALM: PROJECT.TEST
+      KDC_MASTER_PASSWORD: ${KDC_MASTER_PASSWORD:?Set KDC_MASTER_PASSWORD in .env}
+
+    ports:
+      - "88:88/tcp"
+      - "88:88/udp"
+
+    volumes:
+      - ./kdc/config/krb5.conf:/etc/krb5.conf:ro
+      - ./kdc/config/kdc.conf:/etc/krb5kdc/kdc.conf:ro
+      - ./kdc/config/kadm5.acl:/etc/krb5kdc/kadm5.acl:ro
+      - ./kdc/data:/var/lib/krb5kdc
+      - ./kdc/logs:/var/log/kerberos
+
+    restart: unless-stopped
+
+    networks:
+      - kerberos-network
+
+  bob:
+    build:
+      context: ./bob
+
+    container_name: bob
+    hostname: bob
+
+    environment:
+      KRB5_CONFIG: /etc/krb5.conf
+      KRB5_KTNAME: FILE:/etc/bob/bob.keytab
+
+    volumes:
+      - ./bob/krb5.conf:/etc/krb5.conf:ro
+      - ./bob/keytabs/bob.keytab:/etc/bob/bob.keytab:ro
+
+    ports:
+      - "5000:5000"
+
+    depends_on:
+      - kdc
+
+    networks:
+      - kerberos-network
+
+  alice:
+    build:
+      context: ./alice
+    container_name: alice
+    hostname: alice
+    environment:
+      KRB5_CONFIG: /etc/krb5.conf
+      KRB5CCNAME: FILE:/tmp/krb5cc_alice
+    volumes:
+      - ./bob/krb5.conf:/etc/krb5.conf:ro
+    depends_on:
+      - kdc
+    networks:
+      - kerberos-network
+
+networks:
+  kerberos-network:
+    driver: bridge
