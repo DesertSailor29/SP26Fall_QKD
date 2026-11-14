@@ -5,7 +5,8 @@ Runs all parties in one process. For one container per party, see run.sh and qkd
 
 import argparse
 
-from qkdsim.protocol import QBER_THRESHOLD, run_bb84
+from qkdsim.params import QBER_THRESHOLD
+from qkdsim.protocol import run_bb84
 
 
 def main() -> None:
