@@ -1,19 +1,27 @@
 """Single-process BB84 runner: prepare, measure, sift, estimate QBER, accept or abort.
 
-For one process per party (e.g. one Docker container each), see qkdsim.node.
+The parties live in qkdsim.alice and qkdsim.bob. For one process per party (e.g. one Docker
+container each), see qkdsim.node.
+
+Classical messages (unauthenticated):
+  Bob   -> Alice  "bases"   Bob's measurement bases
+  Alice -> Bob    "sift"    mask of positions where the bases matched
+  Alice -> Bob    "sample"  random positions of the sifted key and Alice's bits there
+  Bob   -> Alice  "qber"    error rate Bob found on that sample
+
+The sample is public after this exchange, so both sides drop it from the key.
 """
 
 from dataclasses import dataclass
 
 import numpy as np
 
-from qkdsim.parties import Alice, Bob
+from qkdsim.alice import Alice
+from qkdsim.bob import Bob
+from qkdsim.params import QBER_THRESHOLD, SAMPLE_FRACTION
 from qkdsim.quantum import InterceptResendEve, PerfectChannel, QuantumChannel
 from qkdsim.rng import RandomSource, SeededRandom, SystemRandom
 from qkdsim.transport import InMemoryTransport, TranscriptEntry
-
-SAMPLE_FRACTION = 0.25  # share of the sifted key sacrificed to estimate the error rate
-QBER_THRESHOLD = 0.11   # BB84 abort threshold (one-way post-processing)
 
 
 @dataclass(frozen=True)

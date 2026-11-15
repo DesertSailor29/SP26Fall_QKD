@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from qkdsim.parties import sample_size
+from qkdsim.alice import sample_size
 from qkdsim.quantum import InterceptResendEve, PerfectChannel, Pulses, measure
 from qkdsim.rng import SeededRandom, SystemRandom
 from qkdsim.sifting import matching_mask, sift

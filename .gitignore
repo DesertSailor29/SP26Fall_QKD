@@ -23,6 +23,14 @@ build/
 .ruff_cache/
 .ipynb_checkpoints/
 
+# Kerberos secrets and runtime state: the KDC database (holds the master key stash),
+# keytabs and credential caches must never be committed.
+kdc/data/
+kdc/logs/
+keytabs/
+*.keytab
+krb5cc_*
+
 # LaTeX build artifacts
 *.aux
 *.bbl
